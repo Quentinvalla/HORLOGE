@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="description" content="Simulateur responsive de l'horloge coucou, avec heure réelle, réglage manuel et cadran à 60 LEDs.">
+  <link rel="icon" type="image/jpeg" href="https://img.magnific.com/vecteurs-libre/horloge-fleche-vers-avant_78370-7265.jpg?semt=ais_hybrid&amp;w=740&amp;q=80">
+  <title>Simulation de l'horloge coucou</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --panel: #111d30;
+      --panel-light: #16253b;
+      --line: rgba(184, 204, 226, .15);
+      --text: #eef4fb;
+      --muted: #a9b8ca;
+      --blue: #78b7ff;
+      --blue-dark: #5579b8;
+      --gold: #f2c36b;
+      --off: #293a50;
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 75% 0%, #1b3150 0, transparent 34%), var(--bg);
+      color: var(--text);
+      font: 16px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input, select { font: inherit; }
+    button, input, select { min-height: 46px; }
+    .page { width: min(100% - 32px, 1060px); margin-inline: auto; }
+    header { border-bottom: 1px solid var(--line); background: rgba(11, 18, 32, .82); }
+    .topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; }
+    .brand-mark {
+      display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px;
+      color: #081321; background: linear-gradient(135deg, #61d4d0, var(--blue)); font-weight: 900;
+    }
+    .back-link { color: var(--blue); font-size: .92rem; }
+    main { padding-block: clamp(24px, 5vw, 48px) 40px; }
+    h1 { margin: 0; font-size: clamp(1.7rem, 5vw, 2.5rem); line-height: 1.15; letter-spacing: -.04em; }
+    .intro { margin: 10px 0 24px; max-width: 720px; color: var(--muted); }
+    .layout { display: grid; gap: 18px; align-items: start; }
+    .panel {
+      min-width: 0; padding: clamp(16px, 4vw, 26px); border: 1px solid var(--line);
+      border-radius: var(--radius); background: linear-gradient(145deg, rgba(120,183,255,.06), transparent 55%), var(--panel);
+    }
+    .dial-wrap { display: grid; justify-items: center; }
+    .dial { display: block; width: min(100%, 440px); height: auto; overflow: visible; }
+    .orbit-line { fill: none; stroke: rgba(120,183,255,.28); stroke-width: 1.5; }
+    .orbit-inner { fill: none; stroke: rgba(120,183,255,.18); stroke-width: 1; stroke-dasharray: 4 6; }
+    .led { fill: var(--off); transition: fill .45s, opacity .45s, filter .45s; }
+    .led.past { fill: var(--blue); }
+    .led.active { fill: #fff; filter: drop-shadow(0 0 5px rgba(255,255,255,.9)); }
+    .led.active.night { fill: #fff; filter: drop-shadow(0 0 5px rgba(255,255,255,.9)); }
+    .led.blink-off { fill: var(--off); filter: none; }
+    .led.active.night.blink-off { fill: var(--off); filter: none; }
+    .led.hour-flash { animation: hourly-led-flash 1.2s steps(1, end) both; }
+    .sun-orbit { fill: none; stroke: rgba(120,183,255,.2); stroke-width: 1; }
+    .sun { transform-box: view-box; }
+    .sun-sphere { transition: opacity 1s ease, filter 1s ease; }
+    .sun-day { fill: url(#daySun); filter: drop-shadow(0 0 10px rgba(242,195,107,.6)); opacity: 1; }
+    .sun-night { fill: url(#nightSun); filter: drop-shadow(0 0 10px rgba(87,130,207,.7)); opacity: 0; }
+    .sun.night .sun-day { opacity: 0; }
+    .sun.night .sun-night { opacity: 1; }
+    .sun-halo { fill: none; stroke: rgba(242,195,107,.38); stroke-width: 2; transition: stroke 1s ease; }
+    .sun.night .sun-halo { stroke: rgba(120,160,230,.38); }
+    @keyframes hourly-led-flash {
+      0% { fill: var(--gold); filter: drop-shadow(0 0 6px var(--gold)); }
+      16.6667% { fill: var(--off); filter: none; }
+      33.3333% { fill: var(--gold); filter: drop-shadow(0 0 6px var(--gold)); }
+      50% { fill: var(--off); filter: none; }
+      66.6667% { fill: var(--gold); filter: drop-shadow(0 0 6px var(--gold)); }
+      83.3333%, 100% { fill: var(--off); filter: none; }
+    }
+    .dial-time { fill: var(--text); font: 700 66px ui-monospace, SFMono-Regular, Consolas, monospace; text-anchor: middle; dominant-baseline: middle; transition: opacity .2s, transform .2s; transform-origin: 180px 180px; }
+    .dial-time.changing { opacity: .35; transform: scale(.86); }
+    .status { margin: 6px 0 0; color: var(--muted); text-align: center; }
+    .status.running { color: #8de0c5; }
+    .status.paused { color: var(--gold); }
+    .led-summary { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; }
+    .led-summary strong { color: var(--text); }
+    .controls h2 { margin: 0 0 8px; font-size: 1.2rem; }
+    .help { margin: 0 0 18px; color: var(--muted); font-size: .92rem; }
+    .time-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    label { display: grid; gap: 6px; color: var(--muted); font-size: .88rem; }
+    input, select {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px;
+      outline: none; background: var(--bg); color: var(--text);
+    }
+    input:focus, select:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .speed { margin-top: 15px; }
+    .speed select { max-width: 180px; }
+    .button-stack { display: grid; gap: 10px; margin-top: 18px; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button {
+      padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px;
+      background: var(--panel-light); color: var(--text); cursor: pointer; touch-action: manipulation;
+    }
+    button:hover { filter: brightness(1.12); }
+    button.primary { border-color: var(--blue); background: var(--blue); color: #081321; font-weight: 800; }
+    .legend { display: grid; gap: 10px; margin: 20px 0 0; padding: 16px 0 0; border-top: 1px solid var(--line); }
+    .legend-row { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: .9rem; }
+    .legend-dot { width: 11px; height: 11px; flex: 0 0 11px; border-radius: 50%; background: var(--off); }
+    .legend-dot.past { background: var(--blue); }
+    .legend-dot.current { background: #fff; box-shadow: 0 0 8px rgba(255,255,255,.55); }
+    .legend-dot.sun-day { background: var(--gold); }
+    .legend-dot.sun-night { background: #9bbcff; box-shadow: 0 0 0 2px #fff, 0 0 8px 3px rgba(255,255,255,.9); }
+    .note { margin: 18px 0 0; color: var(--muted); font-size: .84rem; }
+    @media (min-width: 820px) {
+      .layout { grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr); }
+      .dial-panel { position: sticky; top: 20px; }
+    }
+    @media (max-width: 420px) {
+      .page { width: min(100% - 22px, 1060px); }
+      .topbar { min-height: 58px; }
+      .brand { gap: 7px; font-size: .9rem; }
+      .back-link { font-size: .82rem; }
+      .panel { border-radius: 17px; }
+      .time-fields { gap: 7px; }
+      input { padding-inline: 8px; }
+      .button-row { grid-template-columns: 1fr; }
+      .speed select { max-width: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="page topbar">
+      <a class="brand" href="Spitch-Présentation.html"><span class="brand-mark">HC</span><span>HORLOGE COUCOU</span></a>
+      <a class="back-link" href="Spitch-Présentation.html">← Présentation</a>
+    </div>
+  </header>
+  <main class="page">
+    <h1>Simulateur de l'horloge</h1>
+    <p class="intro">Le cadran suit l'heure actuelle dès l'ouverture. Tu peux régler une heure simulée ou revenir à l'heure réelle, sur ordinateur comme sur smartphone.</p>
+
+    <div class="layout">
+      <section class="panel dial-panel" aria-label="Cadran simulé">
+        <div class="dial-wrap">
+          <svg class="dial" id="dial" viewBox="0 0 360 360" role="img" aria-labelledby="dialTitle dialDescription">
+            <title id="dialTitle">Cadran de simulation à 60 LEDs</title>
+            <desc id="dialDescription">Les LEDs indiquent les minutes et le soleil indique l'heure.</desc>
+            <defs>
+              <radialGradient id="daySun" cx="35%" cy="30%">
+                <stop offset="0%" stop-color="#fff4c8"/>
+                <stop offset="55%" stop-color="#f2c36b"/>
+                <stop offset="100%" stop-color="#c88335"/>
+              </radialGradient>
+              <radialGradient id="nightSun" cx="35%" cy="30%">
+                <stop offset="0%" stop-color="#dceaff"/>
+                <stop offset="55%" stop-color="#5579b8"/>
+                <stop offset="100%" stop-color="#17294b"/>
+              </radialGradient>
+            </defs>
+            <circle class="sun-orbit" cx="180" cy="180" r="166"/>
+            <circle class="orbit-line" cx="180" cy="180" r="142"/>
+            <circle class="orbit-inner" cx="180" cy="180" r="101"/>
+            <circle class="orbit-line" cx="180" cy="180" r="58"/>
+            <g id="leds" aria-hidden="true"></g>
+            <g id="sun" class="sun" aria-hidden="true">
+              <circle class="sun-halo" cx="0" cy="0" r="20"/>
+              <circle class="sun-sphere sun-day" cx="0" cy="0" r="14"/>
+              <circle class="sun-sphere sun-night" cx="0" cy="0" r="14"/>
+            </g>
+            <text id="dialTime" class="dial-time" x="180" y="180">00</text>
+          </svg>
+        </div>
+        <p id="status" class="status paused" role="status">En pause</p>
+        <p class="led-summary"><strong id="activeLed">LED 01 / 60</strong> · <span id="flashCount">00 / 60 secondes</span></p>
+      </section>
+
+      <section class="panel controls" aria-labelledby="controlsTitle">
+        <h2 id="controlsTitle">Régler la simulation</h2>
+        <p class="help">La page démarre sur l'heure actuelle. Quand tu appliques une heure, le soleil rejoint sa position par le chemin le plus court et les LEDs changent progressivement. À chaque heure pleine, les 60 LEDs clignotent trois fois en jaune.</p>
+
+        <div class="time-fields">
+          <label for="hours">Heure
+            <input id="hours" type="number" inputmode="numeric" min="0" max="23" step="1" value="12">
+          </label>
+          <label for="minutes">Minute
+            <input id="minutes" type="number" inputmode="numeric" min="0" max="59" step="1" value="0">
+          </label>
+          <label for="seconds">Seconde
+            <input id="seconds" type="number" inputmode="numeric" min="0" max="59" step="1" value="0">
+          </label>
+        </div>
+
+        <label class="speed" for="speed">Vitesse de simulation
+          <select id="speed">
+            <option value="1">1×</option>
+            <option value="5">5×</option>
+            <option value="10">10×</option>
+          </select>
+        </label>
+
+        <div class="button-stack">
+          <button id="start" class="primary" type="button">Appliquer l'heure réglée</button>
+          <div class="button-row">
+            <button id="pause" type="button">Mettre en pause</button>
+            <button id="currentTime" type="button">Revenir à l'heure actuelle</button>
+          </div>
+        </div>
+
+        <div class="legend" aria-label="Légende">
+          <div class="legend-row"><span class="legend-dot past"></span>Minutes déjà écoulées</div>
+          <div class="legend-row"><span class="legend-dot current"></span>Minute en cours (clignote)</div>
+          <div class="legend-row"><span class="legend-dot"></span>Minutes à venir</div>
+          <div class="legend-row"><span class="legend-dot sun-day"></span>Soleil jaune : de 6 h à 18 h</div>
+          <div class="legend-row"><span class="legend-dot sun-night"></span>Soleil bleu nuit : de 18 h à 6 h</div>
+        </div>
+        <p class="note">Le flash horaire dure 1,2 seconde : il ne bloque pas l'horloge ni la minute suivante. Le nombre au centre indique uniquement l'heure. Tu peux reprendre l'heure réelle à tout moment.</p>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const ledGroup = document.getElementById("leds");
+      const ledNodes = [];
+      const center = 180;
+      const ledRadius = 142;
+      const svgNamespace = "http://www.w3.org/2000/svg";
+
+      for (let index = 0; index < 60; index += 1) {
+        const angle = (index / 60) * Math.PI * 2 - Math.PI / 2;
+        const led = document.createElementNS(svgNamespace, "circle");
+        led.setAttribute("cx", String(center + Math.cos(angle) * ledRadius));
+        led.setAttribute("cy", String(center + Math.sin(angle) * ledRadius));
+        led.setAttribute("r", "4.2");
+        led.setAttribute("class", "led future");
+        ledGroup.appendChild(led);
+        ledNodes.push(led);
+      }
+
+      const fields = {
+        hours: document.getElementById("hours"),
+        minutes: document.getElementById("minutes"),
+        seconds: document.getElementById("seconds"),
+      };
+      const speedInput = document.getElementById("speed");
+      const sun = document.getElementById("sun");
+      const dialTime = document.getElementById("dialTime");
+      const status = document.getElementById("status");
+      const pauseButton = document.getElementById("pause");
+      const activeLed = document.getElementById("activeLed");
+      const flashCount = document.getElementById("flashCount");
+      const editedFields = new Set();
+      let mode = "live";
+      let baseSeconds = 0;
+      let startedAt = 0;
+      let runningSpeed = Number(speedInput.value);
+      let displayedHour = null;
+      let displayedHourBucket = null;
+      let hourlyFlashStartedAt = null;
+      let hourAnimationTimer;
+      let sunAngle = null;
+      let sunOrbit = null;
+      const sunRadius = 166;
+      const sunOrbitDuration = 1200;
+
+      function setFields(totalSeconds) {
+        const wholeSeconds = Math.floor(totalSeconds) % 86400;
+        fields.hours.value = String(Math.floor(wholeSeconds / 3600)).padStart(2, "0");
+        fields.minutes.value = String(Math.floor(wholeSeconds / 60) % 60).padStart(2, "0");
+        fields.seconds.value = String(wholeSeconds % 60).padStart(2, "0");
+        editedFields.clear();
+      }
+
+      function syncLiveFields(totalSeconds) {
+        const wholeSeconds = Math.floor(totalSeconds) % 86400;
+        const values = {
+          hours: String(Math.floor(wholeSeconds / 3600)).padStart(2, "0"),
+          minutes: String(Math.floor(wholeSeconds / 60) % 60).padStart(2, "0"),
+          seconds: String(wholeSeconds % 60).padStart(2, "0"),
+        };
+        Object.entries(fields).forEach(([name, field]) => {
+          if (!editedFields.has(field) && document.activeElement !== field) field.value = values[name];
+        });
+      }
+
+      function readFields() {
+        if (Object.values(fields).some(field => field.value.trim() === "")) {
+          status.textContent = "Complète les trois champs pour régler l'heure.";
+          status.className = "status paused";
+          return null;
+        }
+        const hour = Number(fields.hours.value);
+        const minute = Number(fields.minutes.value);
+        const second = Number(fields.seconds.value);
+        const valid = Number.isInteger(hour) && hour >= 0 && hour <= 23
+          && Number.isInteger(minute) && minute >= 0 && minute <= 59
+          && Number.isInteger(second) && second >= 0 && second <= 59;
+        if (!valid) {
+          status.textContent = "Entre une heure valide (00:00:00 à 23:59:59).";
+          status.className = "status paused";
+          return null;
+        }
+        return hour * 3600 + minute * 60 + second;
+      }
+
+      function getTime() {
+        if (mode === "live") {
+          const now = new Date();
+          return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
+        }
+        if (mode === "running") {
+          return (baseSeconds + ((performance.now() - startedAt) / 1000) * runningSpeed) % 86400;
+        }
+        return baseSeconds;
+      }
+
+      function angleForHour(hourFraction) {
+        return 180 + hourFraction * 15;
+      }
+
+      function animateSunTo(totalSeconds) {
+        const targetAngle = angleForHour(totalSeconds / 3600);
+        const startAngle = sunAngle ?? targetAngle;
+        const currentAngle = ((startAngle % 360) + 360) % 360;
+        const shortestDelta = ((targetAngle - currentAngle + 540) % 360) - 180;
+        sunOrbit = {
+          startAngle,
+          endAngle: startAngle + shortestDelta,
+          startedAt: performance.now(),
+        };
+      }
+
+      function render() {
+        const total = getTime();
+        const wholeSeconds = Math.floor(total);
+        const fraction = total - wholeSeconds;
+        const hour = Math.floor(wholeSeconds / 3600);
+        const minute = Math.floor(wholeSeconds / 60) % 60;
+        const second = wholeSeconds % 60;
+        const hourFraction = hour + minute / 60 + second / 3600;
+        const night = hour < 6 || hour >= 18;
+        const hourBucket = Math.floor(wholeSeconds / 3600);
+
+        if (mode === "live") syncLiveFields(total);
+        if (displayedHourBucket !== null && hourBucket !== displayedHourBucket) {
+          hourlyFlashStartedAt = performance.now();
+        }
+        displayedHourBucket = hourBucket;
+        if (sunOrbit) {
+          const progress = Math.min((performance.now() - sunOrbit.startedAt) / sunOrbitDuration, 1);
+          const easedProgress = progress * progress * (3 - 2 * progress);
+          sunAngle = sunOrbit.startAngle + (sunOrbit.endAngle - sunOrbit.startAngle) * easedProgress;
+          if (progress === 1) sunOrbit = null;
+        } else {
+          const targetAngle = angleForHour(hourFraction);
+          if (sunAngle === null) {
+            sunAngle = targetAngle;
+          } else {
+            const difference = ((targetAngle - sunAngle + 540) % 360) - 180;
+            sunAngle += difference;
+          }
+        }
+        sun.setAttribute("transform", `translate(${center} ${center}) rotate(${sunAngle}) translate(0 ${-sunRadius})`);
+        sun.classList.toggle("night", night);
+        if (displayedHour !== hour) {
+          displayedHour = hour;
+          dialTime.classList.remove("changing");
+          dialTime.textContent = String(hour).padStart(2, "0");
+          window.clearTimeout(hourAnimationTimer);
+          requestAnimationFrame(() => dialTime.classList.add("changing"));
+          hourAnimationTimer = window.setTimeout(() => dialTime.classList.remove("changing"), 220);
+        }
+
+        const hourlyFlash = hourlyFlashStartedAt !== null && performance.now() - hourlyFlashStartedAt < 1200;
+        ledNodes.forEach((led, index) => {
+          let state;
+          if (hourlyFlash) {
+            state = "led hour-flash";
+          } else if (index < minute) {
+            state = "led past";
+          } else if (index === minute) {
+            const advancing = mode === "live" || mode === "running";
+            const blinkOn = !advancing || Math.floor(fraction * 2) === 0;
+            state = `led active${night ? " night" : ""}${blinkOn ? "" : " blink-off"}`;
+          } else {
+            state = "led future";
+          }
+          if (led.getAttribute("class") !== state) led.setAttribute("class", state);
+        });
+
+        activeLed.textContent = `LED ${String(minute + 1).padStart(2, "0")} / 60`;
+        flashCount.textContent = `${String(second).padStart(2, "0")} / 60 secondes`;
+        if (mode === "live") {
+          status.textContent = "Heure actuelle";
+          status.className = "status running";
+          pauseButton.textContent = "Mettre en pause";
+        } else if (mode === "running") {
+          status.textContent = `Simulation · vitesse ${runningSpeed}×`;
+          status.className = "status running";
+          pauseButton.textContent = "Mettre en pause";
+        } else {
+          status.textContent = "Simulation en pause";
+          status.className = "status paused";
+          pauseButton.textContent = "Reprendre";
+        }
+      }
+
+      document.getElementById("start").addEventListener("click", () => {
+        const selectedTime = readFields();
+        if (selectedTime === null) return;
+        baseSeconds = selectedTime;
+        editedFields.clear();
+        runningSpeed = Number(speedInput.value);
+        startedAt = performance.now();
+        mode = "running";
+        displayedHourBucket = Math.floor(selectedTime / 3600);
+        animateSunTo(selectedTime);
+        render();
+      });
+
+      pauseButton.addEventListener("click", () => {
+        if (mode === "live" || mode === "running") {
+          baseSeconds = getTime();
+          mode = "paused";
+          setFields(baseSeconds);
+        } else {
+          startedAt = performance.now();
+          runningSpeed = Number(speedInput.value);
+          mode = "running";
+        }
+        render();
+      });
+
+      document.getElementById("currentTime").addEventListener("click", () => {
+        mode = "live";
+        const now = new Date();
+        baseSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        setFields(baseSeconds);
+        displayedHourBucket = now.getHours();
+        animateSunTo(baseSeconds);
+        render();
+      });
+
+      speedInput.addEventListener("change", () => {
+        if (mode !== "running") return;
+        baseSeconds = getTime();
+        startedAt = performance.now();
+        runningSpeed = Number(speedInput.value);
+      });
+
+      Object.values(fields).forEach(field => {
+        field.addEventListener("input", () => editedFields.add(field));
+      });
+
+      setFields(getTime());
+      render();
+      function frame() {
+        render();
+        window.requestAnimationFrame(frame);
+      }
+      window.requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
