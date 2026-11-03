@@ -53,6 +53,7 @@
     }
     .dial-wrap { display: grid; justify-items: center; }
     .dial { display: block; width: min(100%, 440px); height: auto; overflow: visible; }
+    .sky { pointer-events: none; }
     .orbit-line { fill: none; stroke: rgba(120,183,255,.28); stroke-width: 1.5; }
     .orbit-inner { fill: none; stroke: rgba(120,183,255,.18); stroke-width: 1; stroke-dasharray: 4 6; }
     .led { fill: var(--off); transition: fill .45s, opacity .45s, filter .45s; }
@@ -79,8 +80,9 @@
       66.6667% { fill: var(--gold); filter: drop-shadow(0 0 6px var(--gold)); }
       83.3333%, 100% { fill: var(--off); filter: none; }
     }
-    .dial-time { fill: var(--text); font: 700 66px ui-monospace, SFMono-Regular, Consolas, monospace; text-anchor: middle; dominant-baseline: middle; transition: opacity .2s, transform .2s; transform-origin: 180px 180px; }
+    .dial-time { fill: var(--text); font: 700 56px ui-monospace, SFMono-Regular, Consolas, monospace; text-anchor: middle; dominant-baseline: middle; transition: opacity .2s, transform .2s; transform-origin: 180px 180px; }
     .dial-time.changing { opacity: .35; transform: scale(.86); }
+    .dial-minutes { fill: var(--muted); font: 600 22px ui-monospace, SFMono-Regular, Consolas, monospace; text-anchor: middle; dominant-baseline: middle; }
     .status { margin: 6px 0 0; color: var(--muted); text-align: center; }
     .status.running { color: #8de0c5; }
     .status.paused { color: var(--gold); }
@@ -149,7 +151,7 @@
         <div class="dial-wrap">
           <svg class="dial" id="dial" viewBox="0 0 360 360" role="img" aria-labelledby="dialTitle dialDescription">
             <title id="dialTitle">Cadran de simulation à 60 LEDs</title>
-            <desc id="dialDescription">Les LEDs indiquent les minutes et le soleil indique l'heure.</desc>
+            <desc id="dialDescription">Le haut du cadran représente le jour et le bas la nuit. Les LEDs indiquent les minutes, l'heure et les minutes sont affichées au centre, et le soleil indique l'heure dans la journée.</desc>
             <defs>
               <radialGradient id="daySun" cx="35%" cy="30%">
                 <stop offset="0%" stop-color="#fff4c8"/>
@@ -161,7 +163,23 @@
                 <stop offset="55%" stop-color="#5579b8"/>
                 <stop offset="100%" stop-color="#17294b"/>
               </radialGradient>
+              <clipPath id="dialFace">
+                <circle cx="180" cy="180" r="158"/>
+              </clipPath>
+              <linearGradient id="daySky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#62b5f5" stop-opacity=".74"/>
+                <stop offset="100%" stop-color="#347fbd" stop-opacity=".68"/>
+              </linearGradient>
+              <linearGradient id="nightSky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#12284b" stop-opacity=".91"/>
+                <stop offset="100%" stop-color="#050d1e" stop-opacity=".94"/>
+              </linearGradient>
             </defs>
+            <g class="sky" clip-path="url(#dialFace)">
+              <rect x="22" y="22" width="316" height="158" fill="url(#daySky)"/>
+              <rect x="22" y="180" width="316" height="158" fill="url(#nightSky)"/>
+              <path d="M22 180H122 M238 180H338" fill="none" stroke="#d4edff" stroke-opacity=".72" stroke-width="1.7"/>
+            </g>
             <circle class="sun-orbit" cx="180" cy="180" r="166"/>
             <circle class="orbit-line" cx="180" cy="180" r="142"/>
             <circle class="orbit-inner" cx="180" cy="180" r="101"/>
@@ -172,7 +190,10 @@
               <circle class="sun-sphere sun-day" cx="0" cy="0" r="14"/>
               <circle class="sun-sphere sun-night" cx="0" cy="0" r="14"/>
             </g>
-            <text id="dialTime" class="dial-time" x="180" y="180">00</text>
+            <g transform="translate(0 6)">
+              <text id="dialTime" class="dial-time" x="180" y="168">00</text>
+              <text id="dialMinutes" class="dial-minutes" x="180" y="207">00</text>
+            </g>
           </svg>
         </div>
         <p id="status" class="status paused" role="status">En pause</p>
@@ -218,7 +239,7 @@
           <div class="legend-row"><span class="legend-dot sun-day"></span>Soleil jaune : de 6 h à 18 h</div>
           <div class="legend-row"><span class="legend-dot sun-night"></span>Soleil bleu nuit : de 18 h à 6 h</div>
         </div>
-        <p class="note">Le flash horaire dure 1,2 seconde : il ne bloque pas l'horloge ni la minute suivante. Le nombre au centre indique uniquement l'heure. Tu peux reprendre l'heure réelle à tout moment.</p>
+        <p class="note">Le flash horaire dure 1,2 seconde : il ne bloque pas l'horloge ni la minute suivante. Le centre affiche l'heure et les minutes ; les LEDs montrent la progression de la minute en cours. Tu peux reprendre l'heure réelle à tout moment.</p>
       </section>
     </div>
   </main>
@@ -250,6 +271,7 @@
       const speedInput = document.getElementById("speed");
       const sun = document.getElementById("sun");
       const dialTime = document.getElementById("dialTime");
+      const dialMinutes = document.getElementById("dialMinutes");
       const status = document.getElementById("status");
       const pauseButton = document.getElementById("pause");
       const activeLed = document.getElementById("activeLed");
@@ -260,6 +282,7 @@
       let startedAt = 0;
       let runningSpeed = Number(speedInput.value);
       let displayedHour = null;
+      let displayedMinute = null;
       let displayedHourBucket = null;
       let hourlyFlashStartedAt = null;
       let hourAnimationTimer;
@@ -374,6 +397,10 @@
           window.clearTimeout(hourAnimationTimer);
           requestAnimationFrame(() => dialTime.classList.add("changing"));
           hourAnimationTimer = window.setTimeout(() => dialTime.classList.remove("changing"), 220);
+        }
+        if (displayedMinute !== minute) {
+          displayedMinute = minute;
+          dialMinutes.textContent = String(minute).padStart(2, "0");
         }
 
         const hourlyFlash = hourlyFlashStartedAt !== null && performance.now() - hourlyFlashStartedAt < 1200;
